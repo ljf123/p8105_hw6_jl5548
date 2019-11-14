@@ -17,6 +17,24 @@ set.seed(1)
 Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
 
 ```{r}
-df_birthweight = read_csv("./data/birthweight.csv")
+# load and clean data
+df_birthweight = read_csv("./data/birthweight.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(  # convert numeric to factor 
+    babysex = factor(babysex), 
+    frace = factor(frace),
+    malform = factor(malform), 
+    mrace = factor(mrace) 
+  )
+# check for missing data
+anyNA(df_birthweight)
 ```
+
+Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+
+```{r}
+
+```
+
+
 
