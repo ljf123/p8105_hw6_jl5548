@@ -1,0 +1,22 @@
+---
+title: "p8105_hw6_jl5548"
+author: "J L"
+date: "November 14, 2019"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+set.seed(1)
+```
+
+## Problem 1
+
+Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+
+```{r}
+df_birthweight = read_csv("./data/birthweight.csv")
+```
+
