@@ -12,6 +12,8 @@ library(tidyverse)
 library(dplyr)
 library(ggridges)
 library(viridis)
+library(modelr)
+library(mgcv)
 knitr::opts_chunk$set(
 	echo = TRUE,
 	warning = FALSE,
@@ -32,15 +34,15 @@ set.seed(1)
 
 ## Problem 1
 
-Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).
+**Load and clean the data for regression analysis (i.e. convert numeric to factor where appropriate, check for missing data, etc.).**
 
 ```{r}
 # load and clean variable names
-df_birthweight = read_csv("./data/birthweight.csv") %>% 
+df_birthweight_origin = read_csv("./data/birthweight.csv") %>% 
   janitor::clean_names() 
 
 # tidy data and store in another dataframe
-df_birthweight_tidy = df_birthweight %>% 
+df_birthweight = df_birthweight_origin %>% 
   mutate(  # convert numeric to factor, and categorize to corresponding label
     babysex = factor(
       case_when(
@@ -79,14 +81,97 @@ df_birthweight_tidy = df_birthweight %>%
 anyNA(df_birthweight)
 
 # display tidied dataset
-df_birthweight_tidy
+df_birthweight
 ```
 
-Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.
+
+**Propose a regression model for birthweight. This model may be based on a hypothesized structure for the factors that underly birthweight, on a data-driven model-building process, or a combination of the two. Describe your modeling process and show a plot of model residuals against fitted values – use add_predictions and add_residuals in making this plot.**
+
+I proposed that baby's birth weight as an outcome that may depend on baby's head circumference at birth, baby's length at birth, and mother's weight at delivery. I fit the initial proposed model in the following code chunk using lm() function.
 
 ```{r}
+## propose a regression model for birthweight (outcome), with bhead, blength, delwt as predictors
+model_proposed = lm(bwt ~ bhead + blength + delwt, data = df_birthweight) 
+## use the broom package to tidy the coefficient table and reveal results
+model_proposed %>% broom::tidy()
+```
 
+plot of model residuals against fitted values:
+
+```{r}
+## show a plot of model residuals against fitted values
+df_birthweight %>% 
+  ## add predictions (fitted values)
+  modelr::add_predictions(model_proposed) %>% 
+  ## add residuals
+  modelr::add_residuals(model_proposed) %>% 
+  ggplot(aes(x = resid, y = pred)) + 
+  geom_point() +
+  labs(
+    title = "model residuals against fitted values",
+    x = "residuals",
+    y = "fitted values"
+  )
 ```
 
 
+**Compare your model to two others:**
 
+__* One using length at birth and gestational age as predictors (main effects only)__
+
+```{r}
+## fit a regression model for birthweight (outcome), with blength and gaweeks as predictors
+fit1 = lm(bwt ~ blength + gaweeks, data = df_birthweight)
+## tidy and reveal results
+fit1 %>% broom::tidy()
+```
+
+__* One using head circumference, length, sex, and all interactions (including the three-way interaction) between these__
+
+```{r}
+## fit a regression model for birthweight (outcome), with bhead, blength, babysex, and interactions as predictors
+fit2 = lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = df_birthweight)
+## tidy and reveal results
+fit2 %>% broom::tidy()
+```
+
+**Make this comparison in terms of the cross-validated prediction error; use crossv_mc and functions in purrr as appropriate.**
+
+```{r}
+## preforms the training / testing split 100 times, and stores the datasets
+cv_df = crossv_mc(df_birthweight, 100)
+cv_df =
+  cv_df %>% 
+  ## turn the training and testing data as tibble
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  ) %>% 
+  ## fit 3 models for the training data
+  mutate(
+    proposed_mod  = map(train, ~lm(bwt ~ bhead + blength + delwt, data = .x)),
+    fit1_mod  = map(train, ~lm(bwt ~ blength + gaweeks, data = .x)),
+    fit2_mod  = map(train, ~lm(bwt ~ bhead + blength + babysex + bhead*blength + bhead*babysex + blength*babysex + bhead*blength*babysex, data = .x)) 
+  ) %>% 
+  ## calculate RMSEs for 3 models on the testing data
+  mutate(
+    rmse_proposed = map2_dbl(proposed_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_fit1 = map2_dbl(fit1_mod, test, ~rmse(model = .x, data = .y)),
+    rmse_fit2 = map2_dbl(fit2_mod, test, ~rmse(model = .x, data = .y))
+  )
+
+## plot the distribution of RMSE values for each model to compare
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(
+    everything(),
+    names_to = "model", 
+    values_to = "rmse",
+    names_prefix = "rmse_") %>% 
+  mutate(model = fct_inorder(model)) %>% 
+  ggplot(aes(x = model, y = rmse)) + 
+  geom_violin() +
+  labs(title = "distribution of RMSE values for each model")
+```
+
+As shown in the plot, the proposed model (baby's birth weight as an outcome that may depend on baby's head circumference at birth, baby's length at birth, and mother's weight at delivery) has the lowest RMSE values. Therefore, we can conclude that the initially proposed model is better than the other two (the main effect model and the model with interactions).
